@@ -12,31 +12,31 @@
 #include "TSL2591.hpp"
 #include <cstdint>
 
-#define __CAN__    1
+#define __CAN__    0
 #define __SERIAL__ 1
 #define SENSOR_ID  0x630
 
-#define SAMPLE_FREQUENCY    10
-#define SAMPLE_PERIOD       1000.0 / SAMPLE_FREQUENCY
 #define I2C_SDA D0
 #define I2C_SCL D1
 
 static I2C i2c1(I2C_SDA, I2C_SCL);
 static TSL2591 sensor(&i2c1, TSL2591_ADDR);
 static DigitalOut led(LED1);
+static DigitalOut led2(D3);
 static CAN can(D10, D2);
 static Ticker ticker;
 static bool sampleFlag = false;
 
 void tick(void) {
     led = !led;
+    led2 = !led;
     sampleFlag = true;
 }
 
 int main() {
     sensor.init();
     sensor.enable();
-    ticker.attach(&tick, SAMPLE_PERIOD);
+    ticker.attach(&tick, 500ms);
 
     while (1) {
         if (sampleFlag) {
@@ -57,7 +57,10 @@ int main() {
 
             // Output result to external device.
 #if __CAN__
-            can.write(CANMessage(SENSOR_ID, (char *)&irradiance, 4));
+            char buf[8] = { '\0' };
+            sprintf(buf, "%.1f", sensor.lux*2.379);
+            can.write(CANMessage(SENSOR_ID, buf, 8));
+            // can.write(CANMessage(SENSOR_ID, (char *)&irradiance, 4));
 #endif
 
 #if __SERIAL__
@@ -65,10 +68,10 @@ int main() {
             // 2019, "A Conversion Guide: Solar Irradiance and Lux Illuminance
             // ", IEEE Dataport, doi: https://dx.doi.org/10.21227/mxr7-p365. 
             printf(
-                "W/m^2: %f\tLux: %i\tLux derived W/m^2: %f\n", 
+                "W/m^2: %f\tLux: %f\tLux derived W/m^2: %f\n", 
                 irradiance,
-                sensor.lux,
-                sensor.lux * 0.0083333);
+                sensor.lux * 2.379,
+                sensor.lux * 2.379 * 0.0083333);
 #endif
 
             sampleFlag = false;
